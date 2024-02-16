@@ -1,5 +1,6 @@
 #include <iostream>
 #include <iomanip>
+#include <vector>
 
 using namespace std;
 
@@ -83,6 +84,38 @@ void rotWord(unsigned char* word)
   word[2] = word[3];
   // Place stored (first) byte at the end
   word[3] = temp;
+}
+
+// subBytes tranformation
+void subBytes(vector<unsigned char>& state)
+{
+  for (int i = 0; i < 16; i++)
+    state[i] = sbox[state[i]];
+}
+
+// shiftRows transformation
+void shiftRows(vector<unsigned char>& state)
+{
+  unsigned char tmp[16];
+  for (int i = 0; i < 16; i++)
+    tmp[i] = state[i];
+  for (int i = 1; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+      state[i + j * 4] = tmp[i * 4 + j];
+}
+
+// mixColumns transformation
+void mixColumns(vector<unsigned char>& state)
+{
+  for (int i = 0; i < 4; i++) {
+    unsigned char s0 = state[i];
+    unsigned char s1 = state[i + 4];
+    unsigned char s2 = state[i + 8];
+    unsigned char s3 = state[i + 12];
+
+    state[i] = (unsigned char)(0x02 + s0 ^ 0x03 * s1 ^ s2 ^ s3);
+    
+  }
 }
 
 /* Driver */
