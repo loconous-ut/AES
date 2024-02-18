@@ -86,37 +86,37 @@ void rotWord(unsigned char* word)
   word[3] = temp;
 }
 
-// subBytes tranformation
-void subBytes(vector<unsigned char>& state)
-{
-  for (int i = 0; i < 16; i++)
-    state[i] = sbox[state[i]];
-}
+// // subBytes tranformation
+// void subBytes(vector<unsigned char>& state)
+// {
+//   for (int i = 0; i < 16; i++)
+//     state[i] = sbox[state[i]];
+// }
 
-// shiftRows transformation
-void shiftRows(vector<unsigned char>& state)
-{
-  unsigned char tmp[16];
-  for (int i = 0; i < 16; i++)
-    tmp[i] = state[i];
-  for (int i = 1; i < 4; i++)
-    for (int j = 0; j < 4; j++)
-      state[i + j * 4] = tmp[i * 4 + j];
-}
+// // shiftRows transformation
+// void shiftRows(vector<unsigned char>& state)
+// {
+//   unsigned char tmp[16];
+//   for (int i = 0; i < 16; i++)
+//     tmp[i] = state[i];
+//   for (int i = 1; i < 4; i++)
+//     for (int j = 0; j < 4; j++)
+//       state[i + j * 4] = tmp[i * 4 + j];
+// }
 
-// mixColumns transformation
-void mixColumns(vector<unsigned char>& state)
-{
-  for (int i = 0; i < 4; i++) {
-    unsigned char s0 = state[i];
-    unsigned char s1 = state[i + 4];
-    unsigned char s2 = state[i + 8];
-    unsigned char s3 = state[i + 12];
+// // mixColumns transformation
+// void mixColumns(vector<unsigned char>& state)
+// {
+//   for (int i = 0; i < 4; i++) {
+//     unsigned char s0 = state[i];
+//     unsigned char s1 = state[i + 4];
+//     unsigned char s2 = state[i + 8];
+//     unsigned char s3 = state[i + 12];
 
-    state[i] = (unsigned char)(0x02 + s0 ^ 0x03 * s1 ^ s2 ^ s3);
+//     state[i] = (unsigned char)(0x02 + s0 ^ 0x03 * s1 ^ s2 ^ s3);
     
-  }
-}
+//   }
+// }
 
 /* Driver */
 
@@ -126,8 +126,8 @@ int main()
   unsigned char result_xtime = 0x00;
   unsigned char result_ffMultiply = 0x00;
   unsigned char a = 0x57;
-  unsigned char b = 0x83;
-  unsigned char word[4] = { 0x32, 0x88, 0x31, 0xe0 };
+  unsigned char b = 0x13;
+  unsigned char word[4] = { 0x2b, 0x7e, 0x15, 0x16 };
   result_ffAdd = ffAdd(a, b);
   result_xtime = xtime(a);
   result_ffMultiply = ffMultiply(a, b);
@@ -135,24 +135,24 @@ int main()
   cout << "Result of ffAdd:      0x" << setw(2) << setfill('0') << hex << (int)result_ffAdd << endl;
   cout << "Result of xtime:      0x" << setw(2) << setfill('0') << hex << (int)result_xtime << endl;
   cout << "Result of ffMultiply: 0x" << setw(2) << setfill('0') << hex << (int)result_ffMultiply << endl;
-  cout << "Original word:        ";
-  for (int i = 0; i < 4; i++)
-    cout << "0x" << setw(2) << setfill('0') << hex << (int)word[i] << " ";
-  cout << endl;
+  // cout << "Original word:        ";
+  // for (int i = 0; i < 4; i++)
+  //   cout << hex << (int)word[i];
+  // cout << endl;
 
-  subWord(word);
+  // subWord(word);
 
-  cout << "Substituted word:     ";
-  for (int i = 0; i < 4; i++)
-    cout << "0x" << setw(2) << setfill('0') << hex << (int)word[i] << " ";
-  cout << endl;
+  // cout << "Substituted word:     ";
+  // for (int i = 0; i < 4; i++)
+  //   cout << hex << (int)word[i];
+  // cout << endl;
 
-  rotWord(word);
+  // rotWord(word);
 
-  cout << "Rotated word:         ";
-  for (int i = 0; i < 4; i++)
-    cout << "0x" << setw(2) << setfill('0') << hex << (int)word[i] << " ";
-  cout << endl;
+  // cout << "Rotated word:         ";
+  // for (int i = 0; i < 4; i++)
+  //   cout << hex << (int)word[i];
+  // cout << endl;
 
   return 0;
 }
