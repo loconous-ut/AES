@@ -1,4 +1,4 @@
-# M2.5 Project: ADvanced Encryption Standard (AES)
+# M2.5 Project: Advanced Encryption Standard (AES)
 This project provides the implementation for AES.
 
 ## Compile
@@ -14,15 +14,18 @@ Alternatively, I made a quick makefile to compile. Quickly make the executable w
 This will produce an executable with name of aes.  
 You may then execute the program running the following command for output to the stdout:
 
-    ./aes
+    ./bin/aes
 
 Alternatively, I would suggest to redirect the output to an output file, as follows:
 
-    ./aes > output
+    ./bin/aes > test/output
+
+I have set up the output from appendix_c in test/appendix_c.txt file to ease the check of the solution with vimdiff.
 
 ## Resources
 
-For all code and AES algorithms, I only used the FIPS 197 specification. Additionally, I utilized the Useful Arrays handout and Unit Tests for method checking. I will be honest by saying that I had to check some Stackoverflow when attempting to get my bit manipulation operations to work. 
+For all code and AES algorithms, I only used the FIPS 197 specification. I also used the Useful Arrays handout and Unit Tests for method checking.  
+I will be honest by saying that I had to check some Stackoverflow and Wikipedia sites when attempting to get my bit manipulation and printing operations to work properly. 
 
 ## Test Cases
 

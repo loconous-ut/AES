@@ -1,5 +1,6 @@
 /* 
  * M2.5 Project: Advanced Encryption Standard (AES)
+ * aes.cpp
  * Author: Luis A. Gonzalez Villalobos
  * Date: 02/19/2024 - 1 day late :(
  * AES Implementation as described in the FIPS 197 specification.
@@ -74,26 +75,59 @@ uint8_t invSbox[16][16] = {
   { 0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d }
 };
 
+//  Global variable - Nr: number of rounds
+int Nr = 0;
 
 /* Helper functions:
+ * - getNR: Determines the number of rounds (Nr)
+ * - printWord: Prints state
+ * 
+ * Deliverables:
  * 1. Finite Field Arithmetic: 
  *   a. ffAdd(): Takes two unsigned chars (one byte) and XORs them to produce addition in two finite fields.
  *   b. xtime(): Takes one unsigned chars (one byte) and left shifts it to produce multiplication of a finite field by x(0x02). 
  *   c. ffMultiply(): Utilizes xtime() to multiply two unsigned chars producing a result of multiplying one finite field by another finite field.
+ * 
  * 2. Key Expansion:
  *   a. subWord(): Takes a four-byte input word and substitudes each byte in that word with its appropriate value from the S-Box.
  *   b. rotWord(): Performs a cyclic permutation on its input word.
+ * 
  * 3. Cipher Function:
  *   a. subBytes(): Transformation that substitutes each byte in the state with its corresponding value from the S-Box.
  *   b. shiftRows(): Transformation that performs a circular shift on each row in the state.
  *   c. mixColumns(): Transformation that treats each column in state as a four-term polynomial. The polynomial is multiplied
  *                    by a fixed polynomial with coefficients. - THIS SUCKs - fixed!
  *   d. addRoundKey(): Transformation adds a round key to the state using XOR.
+ * 
  * 4. invCipher Function:
  *   a. invSubBytes(): Transformation that substitues each byte in the state with its corresponding value from the inverse S-Box.
  *   b. invShiftRows(): Transformation that performs the inverse of shiftRows() on each row in the state.
  *   c. invMixColumns(): Transformation is the inverse of mixColumns() - ALSO SUCKED
  */
+
+// Helper to determine number of rounds
+// Nb (4) and Nk (4, 6, 8)
+int getNr(int Nk)
+{
+  if (Nk == 4) 
+    return 10;
+  else if(Nk == 6) 
+    return 12;
+  else 
+	return 14;
+}
+
+// Helper to print columns as major order
+// Mostly used to print the different states of encrypt/decrypt
+void printWord(uint8_t state[4][4])
+{
+  for (int i = 0; i < 4; i++) {
+	for (int j = 0; j < 4; j++) {
+	  printf("%02x", state[j][i]);
+	}
+  }
+  printf("\n");
+}
 
 // Adds two finite fields - GF(2^8)
 uint8_t ffAdd(uint8_t a, uint8_t b)
@@ -125,484 +159,442 @@ uint8_t ffMultiply(uint8_t a, uint8_t b)
   return result;
 }
 
-// // Substitutes each byte in a four-byte word using the AES S-box
-// // Takes a pointer to the four-byte word as input
-// void subWord(unsigned char* word) 
-// {
-//   // Loop to iterate through each byte in word
-//   for (int i = 0; i < 4; i++)
-//     word[i] = sbox[word[i]];
-// }
+// Substitutes each byte in a four-byte word using the AES S-box
+// Takes a four-byte word as input
+uint32_t subWord(uint32_t a)
+{
+  uint32_t tmp = 0;
 
-// // Perform a cyclic permutation on a four-byte word by shifting its bytes one position to the left
-// void rotWord(unsigned char* word)
-// {
-//   // Store the first byte of the word
-//   unsigned char temp = word[0];
-//   // Shift butes one position to the left
-//   word[0] = word[1];
-//   word[1] = word[2];
-//   word[2] = word[3];
-//   // Place stored (first) byte at the end
-//   word[3] = temp;
-// }
+  for (int i = 0; i < 4; i++) {
+    tmp ^= sbox[(a >> 4) & 0xf][a & 0xf] << i * 8;
+    a >>= 8;
+  }
 
-// // subBytes tranformation
-// void subBytes(vector<unsigned char>& state)
-// {
-//   for (int i = 0; i < 16; i++)
-//     state[i] = sbox[state[i]];
-// }
-
-// // shiftRows transformation
-// void shiftRows(vector<unsigned char>& state)
-// {
-//   unsigned char tmp[16];
-//   for (int i = 0; i < 16; i++)
-//     tmp[i] = state[i];
-//   for (int i = 1; i < 4; i++)
-//     for (int j = 0; j < 4; j++)
-//       state[i + j * 4] = tmp[i * 4 + j];
-// }
-
-// // mixColumns transformation
-// void mixColumns(vector<unsigned char>& state)
-// {
-//   for (int i = 0; i < 4; i++) {
-//     unsigned char s0 = state[i];
-//     unsigned char s1 = state[i + 4];
-//     unsigned char s2 = state[i + 8];
-//     unsigned char s3 = state[i + 12];
-
-//     state[i] = (unsigned char)(0x02 + s0 ^ 0x03 * s1 ^ s2 ^ s3);
-    
-//   }
-// }
-
-
-
-
-//global for number of rounds
-int Nr = 0;
-
-//note: key for us with this algorithm is given as byte[], but both
-//	cipher and invCipher require word[] as input. key expansion performs
-//	this conversion.
-
-//takes a four-byte input word and substitutes each byte in that
-//	word with its appropriate value from (global) s-box
-uint32_t subWord(uint32_t a) {
-	uint32_t tmp = 0;
-
-	for (int i = 0; i < 4; i++) {
-		tmp ^= sbox[(a >> 4) & 0xf][a & 0xf] << i * 8;
-		a >>= 8;
-	}
-
-	return tmp;
+  return tmp;
 }
 
-//performs cyclic permutation on input word
-uint32_t rotWord(uint32_t a) {
-	uint32_t tmp = 0;
+// Perform a cyclic permutation on a four-byte word by shifting its bytes one position to the left
+uint32_t rotWord(uint32_t a)
+{
+  uint32_t tmp = 0;
 
-	tmp ^= a << 8 & 0xffffff00;
-	tmp ^= a >> 24 & 0xff;
+  tmp ^= a << 8 & 0xffffff00;
+  tmp ^= a >> 24 & 0xff;
 
-	return tmp;
+  return tmp;
 }
 
+// Key Expansion from pseudocode in Section 5.2
+// This method generates the key schedule
+void keyExpansion(uint8_t *key, uint32_t *w, int Nk)
+{
+  uint32_t tmp;
+  int i = 0;
 
-//determing Nr (number of rounds) as a function
-//	of Nb (4) and Nk (4, 6, 8)
-int getNr(int Nk) {
-	if (Nk == 4) 
-		return 10;
-	else if(Nk == 6) 
-		return 12;
-	else 
-		return 14;
+  while (i < Nk) {
+	w[i] = (key[4 * i] << 24) ^ (key[4 * i + 1] << 16) ^ (key[4 * i + 2] << 8) ^ (key[4 * i + 3]);
+	i++;
+  }
+
+  i = Nk;
+  Nr = getNr(Nk);
+
+  // while (i < Nb * (Nr+1)) where Nb == 4
+  while (i < 4 * (Nr + 1)) {
+	tmp = w[i - 1];
+		
+    if (i % Nk == 0) 
+	  tmp = subWord(rotWord(tmp)) ^ rcon[i / Nk];
+	else if (Nk > 6 && i % Nk == 4)
+	  tmp = subWord(tmp);
+		
+      w[i] = w[i - Nk] ^ tmp;
+	  i++;
+  }
 }
 
-//note: using pseudo-code from specification (5.2)
-//		also, do i need 3rd arg (int Nk)?
-//take cipher key k and perform a key expansion routine to generate
-//	the key schedule.
-void keyExpansion(uint8_t *key, uint32_t *w, int Nk) {
-	uint32_t tmp;
-	int i;
-
-	i = 0;
-
-	while (i < Nk) {
-		w[i] = (key[4 * i] << 24) ^ (key[4 * i + 1] << 16) ^ (key[4 * i + 2] << 8) ^ (key[4 * i + 3]);
-		i++;
+// SubBytes transformation that substitutes each byte in state
+// with its corresponding value from the S-Box
+void subBytes(uint8_t state[4][4])
+{
+  for (int i = 0; i < 4; i++) {
+	for (int j = 0; j < 4; j++) {
+	  state[i][j] = sbox[(state[i][j] >> 4) & 0xf][state[i][j] & 0xf];
 	}
-
-	i = Nk;
-	Nr = getNr(Nk);
-
-	//while (i < Nb * (Nr+1) where Nb == 4
-	while (i < 4 * (Nr + 1)) {
-		tmp = w[i - 1];
-		
-		if (i % Nk == 0) 
-			tmp = subWord(rotWord(tmp)) ^ rcon[i / Nk];
-		else if (Nk > 6 && i % Nk == 4)
-			tmp = subWord(tmp);
-		
-		w[i] = w[i - Nk] ^ tmp;
-		i++;
-	}
+  }
 }
 
-//how would these work if Nb (second arg of state) wasn't 4?
-//	c++ does not like state[4][] or any variant since i defined
-//	state in main as "state[4][4]"
+// ShiftRows transformation that performs a circular shift on each
+// row in the state, from Section 5.1.2
+void shiftRows(uint8_t state[4][4])
+{
+  for (int row = 1; row < 4; row++) {
+	uint8_t tmp_row[row];
+	for (int i = 0; i < row; i++)
+	  tmp_row[i] = state[row][i];
 
-//this transformation substitutes each byte in the State with its 
-//	corresponding value from the S-Box
-void subBytes(uint8_t state[4][4]) {
-	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 4; j++) {
-			state[i][j] = sbox[(state[i][j] >> 4) & 0xf][state[i][j] & 0xf];
-		}
-	}
+	for (int i = row; i < 4; i++)
+	  state[row][i-row] = state[row][i];
+
+	for (int i = 4 - row; i < 4; i++)
+	  state[row][i] = tmp_row[i - (4 - row)];
+  }
 }
 
-//this transformation performs a circular shift on each row in the 
-//	State (5.1.2)
-void shiftRows(uint8_t state[4][4]) {
-	int i;
-	for (int row = 1; row < 4; row++) {
-		uint8_t tmp_row[row];
-		for (i = 0; i < row; i++) tmp_row[i] = state[row][i];
-		
-		for (i = row; i < 4; i++) state[row][i-row] = state[row][i];
-	 
-		for (i = 4 - row; i < 4; i++) state[row][i] = tmp_row[i - (4 - row)];
+// MixColumns transformation that treats each column in state as a 
+// four-term polynomial. This polynomial is multiplied (ffMultiply method)
+// by a fixed polynomial with coefficients (4.3 and 5.1.3)
+void mixColumns(uint8_t state[4][4])
+{
+  uint8_t state_prime[4];
+
+  // need to change pseudocode from hmw
+  for (int col = 0; col < 4; col++) {
+	for (int row = 0; row < 4; row++) {
+	  if (row == 0)
+	    state_prime[row] = ffMultiply(state[0][col], 0x02) ^ ffMultiply(state[1][col], 0x03) ^ state[2][col] ^ state[3][col];
+	  else if (row == 1)
+		state_prime[row] = state[0][col] ^ ffMultiply(state[1][col], 0x02) ^ ffMultiply(state[2][col], 0x03) ^ state[3][col];
+	  else if (row == 2)
+		state_prime[row] = state[0][col] ^ state[1][col] ^ ffMultiply(state[2][col], 0x02) ^ ffMultiply(state[3][col], 0x03);
+	  else // row == 3
+		state_prime[row] = ffMultiply(state[0][col], 0x03) ^ state[1][col] ^ state[2][col] ^ ffMultiply(state[3][col], 0x02);
 	}
+		
+	for (int i = 0; i < 4; i++)
+	  state[i][col] = state_prime[i];
+  }
 }
 
-//this transformation treats each column in state as a four-term polynomial 
-//this polynomial is multiplied (modulo another polynomial) by a fixed 
-//	polynomial with coefficients (4.3 and 5.1.3)
-void mixColumns(uint8_t state[4][4]) {
-	uint8_t state_prime[4];
+// AddRountKey transformation that adds a round key to state using XOR
+// This method will also work for when looking for its inverse
+void addRoundKey(uint8_t state[4][4], uint32_t *w, int l)
+{
+  uint32_t tmp_col;
 
-	//what was the light weight way to do this, again?
-	//	since ffMultiply is overkill or something
-	for (int col = 0; col < 4; col++) {
-		for (int row = 0; row < 4; row++) {
-			if (row == 0)
-				state_prime[row] = ffMultiply(state[0][col], 0x02) ^ ffMultiply(state[1][col], 0x03) ^ state[2][col] ^ state[3][col];
-			else if (row == 1)
-				state_prime[row] = state[0][col] ^ ffMultiply(state[1][col], 0x02) ^ ffMultiply(state[2][col], 0x03) ^ state[3][col];
-			else if (row == 2)
-				state_prime[row] = state[0][col] ^ state[1][col] ^ ffMultiply(state[2][col], 0x02) ^ ffMultiply(state[3][col], 0x03);
-			else //row = 3
-				state_prime[row] = ffMultiply(state[0][col], 0x03) ^ state[1][col] ^ state[2][col] ^ ffMultiply(state[3][col], 0x02);
-		}
-		
-		for (int i = 0; i < 4; i++) state[i][col] = state_prime[i];
-	}
+  for (int col = 0; col < 4; col++) {
+	tmp_col = 0;
+
+	for (int i = 0; i < 4; i++)
+	  tmp_col ^= state[i][col] << (24 - (8 * i)); 
+
+	printf("%08x", w[l+col]);
+
+	tmp_col ^= w[l+col];
+
+	for (int i = 0; i < 4; i++)
+	  state[i][col] = tmp_col >> (24 - (8 * i)) & 0xff;
+  }
+  
+  printf("\n");
 }
 
-//this transformation adds a round key to the State using XOR
-void addRoundKey(uint8_t state[4][4], uint32_t *w, int l) {
-	uint32_t tmp_col;
-	int i;
-	for (int col = 0; col < 4; col++) {
-		tmp_col = 0;
+// AES Cipher method
+// Utilized pseudo-code from Section 5.1 and Appendix B
+void cipher(uint8_t *in, uint8_t *out, uint32_t *w)
+{
+  uint8_t state[4][4];
+  int byte = 0;
+  // state = in;
+  for (int i = 0; i < 4; i++)
+	for (int j = 0; j < 4; j++)
+	  state[j][i] = in[byte++];
+
+  printf("round[ 0].input     ");
+  printWord(state);
+
+  printf("round[ 0].k_sch     ");
+  addRoundKey(state, w, 0);
+
+  // i == round
+  for (int i = 1; i < Nr; i++) {
+	printf("round[%2d].start     ", i);
+	printWord(state);
 		
-		for (i = 0; i < 4; i++) tmp_col ^= state[i][col] << (24 - (8 * i)); 
-		
-		printf("%08x", w[l+col]);
-
-		tmp_col ^= w[l+col];
-
-		for (i = 0; i < 4; i++) state[i][col] = tmp_col >> (24 - (8 * i)) & 0xff;
-	}
-	printf("\n");
-}
-
-//note: f*** column major order :)
-//function for testing
-void printState(uint8_t state[4][4]) {
-	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 4; j++) {
-			printf("%02x", state[j][i]);
-		}
-	}
-	printf("\n");
-}
-
-//note: using pseudo-code from specification (5.1)
-//the cipher function is specified in section 5.1, and an example is given in appendix B
-void cipher(uint8_t *in, uint8_t *out, uint32_t *w) {
-	uint8_t state[4][4];
-	int i, j, k;
-
-
-	//state = in;
-	for (i = 0, k = 0; i < 4; i++) {
-		for (j = 0; j < 4; j++) {
-			state[j][i] = in[k++];
-		}
-	}
-
-	printf("round[ 0].input     ");
-	printState(state);
-
-	printf("round[ 0].k_sch     ");
-	addRoundKey(state, w, 0);
-
-	//i == round
-	for (i = 1; i < Nr; i++) {
-		printf("round[%2d].start     ", i);
-		printState(state);
-		
-		subBytes(state);
-		printf("round[%2d].s_box     ", i);
-		printState(state);
-		
-		shiftRows(state);
-		printf("round[%2d].s_row     ", i);
-		printState(state);
-		
-		mixColumns(state);
-		printf("round[%2d].m_col     ", i);
-		printState(state);
-		
-		printf("round[%2d].k_sch     ", i);
-		addRoundKey(state, w, i*4);
-	}
-	
-	printf("round[%d].start     ", Nr);
-	printState(state);
-
 	subBytes(state);
-	printf("round[%d].s_box     ", Nr);
-	printState(state);
+	printf("round[%2d].s_box     ", i);
+	printWord(state);
 
 	shiftRows(state);
-	printf("round[%d].s_row     ", Nr);
-	printState(state);
+	printf("round[%2d].s_row     ", i);
+	printWord(state);
+
+	mixColumns(state);
+	printf("round[%2d].m_col     ", i);
+	printWord(state);
+
+	printf("round[%2d].k_sch     ", i);
+	addRoundKey(state, w, i*4);
+  }
 	
-	printf("round[%d].k_sch     ", Nr);
-	addRoundKey(state, w, Nr*4);
+  printf("round[%d].start     ", Nr);
+  printWord(state);
 
-	printf("round[%d].output    ", Nr);
-	printState(state);
+  subBytes(state);
+  printf("round[%d].s_box     ", Nr);
+  printWord(state);
 
-	//out = state
-	for (i = 0, k = 0; i < 4; i++) {
-		for (j = 0; j < 4; j++) {
-			out[k++] = state[j][i];
-		}
-	}
+  shiftRows(state);
+  printf("round[%d].s_row     ", Nr);
+  printWord(state);
+
+  printf("round[%d].k_sch     ", Nr);
+  addRoundKey(state, w, Nr*4);
+
+  printf("round[%d].output    ", Nr);
+  printWord(state);
+
+  // out = state
+  byte = 0;
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+	  out[byte++] = state[j][i];
 }
 
-//this transformation substitutes each byte in the State with its 
-//	corresponding value from the inverse S-Box, thus reversing the effect of a subBytes() operation
-void invSubBytes(uint8_t state[4][4]) {
-	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 4; j++) {
-			state[i][j] = invSbox[(state[i][j] >> 4) & 0xf][state[i][j] & 0xf];
-		}
-	}
+// InvSubBytes transformation that substitutes each byte in state
+// with the corresponding value from the inverse S-Box.
+// This reverses the effect of the subBytes() method
+void invSubBytes(uint8_t state[4][4])
+{
+  for (int i = 0; i < 4; i++)
+	for (int j = 0; j < 4; j++)
+	  state[i][j] = invSbox[(state[i][j] >> 4) & 0xf][state[i][j] & 0xf];
 }
 
-//this transformation performs the inverse of shiftRows() on each
-//	row in the State (5.3.1)
-void invShiftRows(uint8_t state[4][4]) {
-	int i;
-	for (int row = 1; row < 4; row++) {
-		uint8_t tmp_row[row];
-		for (i = 0; i < row; i++) tmp_row[i] = state[row][4 - row + i];
+// InvShiftRows transformation that performs the inverse of shiftRows()
+// on each row in state; from Section 5.3.1
+void invShiftRows(uint8_t state[4][4])
+{
+  for (int row = 1; row < 4; row++) {
+	uint8_t tmp_row[row];
+	for (int i = 0; i < row; i++)
+	  tmp_row[i] = state[row][4 - row + i];
 		
-		for (i = 4 - row - 1; i >= 0; i--) state[row][i + row] = state[row][i];
-	 
-		for (i = 0; i < row; i++) state[row][i] = tmp_row[i];
-	}
+	for (int i = 4 - row - 1; i >= 0; i--)
+	  state[row][i + row] = state[row][i];
+
+	for (int i = 0; i < row; i++)
+	  state[row][i] = tmp_row[i];
+  }
 }
 
-//this transformation is the inverse of mixColumns (5.3.3)
-void invMixColumns(uint8_t state[4][4]) {
-	uint8_t state_prime[4];
+// InvMixColumns transformation is the inverse of mixColumns
+// From Section 5.3.3
+void invMixColumns(uint8_t state[4][4])
+{
+  uint8_t state_prime[4];
 
-	//what was the light weight way to do this, again?
-	//	since ffMultiply is overkill or something
-	for (int col = 0; col < 4; col++) {
-		for (int row = 0; row < 4; row++) {
-			if (row == 0)
-				state_prime[row] = ffMultiply(state[0][col], 0x0e) ^ ffMultiply(state[1][col], 0x0b) ^ ffMultiply(state[2][col], 0x0d) ^ ffMultiply(state[3][col], 0x09);
-			else if (row == 1)
-				state_prime[row] = ffMultiply(state[0][col], 0x09) ^ ffMultiply(state[1][col], 0x0e) ^ ffMultiply(state[2][col], 0x0b) ^ ffMultiply(state[3][col], 0x0d);
-			else if (row == 2)
-				state_prime[row] = ffMultiply(state[0][col], 0x0d) ^ ffMultiply(state[1][col], 0x09) ^ ffMultiply(state[2][col], 0x0e) ^ ffMultiply(state[3][col], 0x0b);
-			else //row = 3
-				state_prime[row] = ffMultiply(state[0][col], 0x0b) ^ ffMultiply(state[1][col], 0x0d) ^ ffMultiply(state[2][col], 0x09) ^ ffMultiply(state[3][col], 0x0e);
-		}
-		
-		for (int i = 0; i < 4; i++) state[i][col] = state_prime[i];
+  for (int col = 0; col < 4; col++) {
+	for (int row = 0; row < 4; row++) {
+	  if (row == 0)
+		state_prime[row] = ffMultiply(state[0][col], 0x0e) ^ ffMultiply(state[1][col], 0x0b) ^ ffMultiply(state[2][col], 0x0d) ^ ffMultiply(state[3][col], 0x09);
+	  else if (row == 1)
+		state_prime[row] = ffMultiply(state[0][col], 0x09) ^ ffMultiply(state[1][col], 0x0e) ^ ffMultiply(state[2][col], 0x0b) ^ ffMultiply(state[3][col], 0x0d);
+	  else if (row == 2)
+		state_prime[row] = ffMultiply(state[0][col], 0x0d) ^ ffMultiply(state[1][col], 0x09) ^ ffMultiply(state[2][col], 0x0e) ^ ffMultiply(state[3][col], 0x0b);
+	  else // row == 3
+		state_prime[row] = ffMultiply(state[0][col], 0x0b) ^ ffMultiply(state[1][col], 0x0d) ^ ffMultiply(state[2][col], 0x09) ^ ffMultiply(state[3][col], 0x0e);
 	}
-
+		
+	for (int i = 0; i < 4; i++)
+	  state[i][col] = state_prime[i];
+  }
 }
 
-//note: inverse of addRoundKey is itself :)
 
-//this function is specified in section 5.3. It reverses the effect of the cipher function
-void invCipher(uint8_t *in, uint8_t *out, uint32_t *w) {
-	uint8_t state[4][4];
-	int i, j, k;
+// InvCipher is the reverse of the AES Cipher method
+// From Section 5.3
+void invCipher(uint8_t *in, uint8_t *out, uint32_t *w)
+{
+  uint8_t state[4][4];
+  int byte = 0;
 
-	//state = in;
-	for (i = 0, k = 0; i < 4; i++) {
-		for (j = 0; j < 4; j++) {
-			state[j][i] = in[k++];
-		}
-	}
+  // state = in;
+  for (int i = 0; i < 4; i++)
+	for (int j = 0; j < 4; j++)
+	  state[j][i] = in[byte++];
 
-	printf("round[ 0].iinput    ");
-	printState(state);
-	
-	printf("round[ 0].ik_sch    ");
-	addRoundKey(state, w, Nr*4);
+  printf("round[ 0].iinput    ");
+  printWord(state);
 
-	//i == round
-	for (i = Nr-1; i > 0; i--) {
-		printf("round[%2d].istart    ", Nr-i);
-		printState(state);
-		
-		invShiftRows(state);
-		printf("round[%2d].is_row    ", Nr-i);
-		printState(state);
-		
-		invSubBytes(state);
-		printf("round[%2d].is_box    ", Nr-i);
-		printState(state);
-		
-		printf("round[%2d].ik_sch    ", Nr-i);
-		addRoundKey(state, w, i*4);
-		printf("round[%2d].ik_add    ", Nr-i);
-		printState(state);
-		
-		invMixColumns(state);
-	}
-	
-	printf("round[%d].istart    ", Nr);
-	printState(state);
+  printf("round[ 0].ik_sch    ");
+  addRoundKey(state, w, Nr*4);
+
+  // i == round
+  for (int i = Nr-1; i > 0; i--) {
+	printf("round[%2d].istart    ", Nr-i);
+	printWord(state);
 
 	invShiftRows(state);
-	printf("round[%d].is_row    ", Nr);
-	printState(state);
-	
+	printf("round[%2d].is_row    ", Nr-i);
+	printWord(state);
+
 	invSubBytes(state);
-	printf("round[%d].is_box    ", Nr);
-	printState(state);
-	
-	printf("round[%d].ik_sch    ", Nr);
-	addRoundKey(state, w, 0);
+	printf("round[%2d].is_box    ", Nr-i);
+	printWord(state);
 
+	printf("round[%2d].ik_sch    ", Nr-i);
+	addRoundKey(state, w, i*4);
+	printf("round[%2d].ik_add    ", Nr-i);
+	printWord(state);
 
-	printf("round[%d].ioutput   ", Nr);
-	printState(state);
-	
-	//out = state
-	for (i = 0, k = 0; i < 4; i++) {
-		for (j = 0; j < 4; j++) {
-			out[k++] = state[j][i];
-		}
-	}
+	invMixColumns(state);
+  }
+
+  printf("round[%d].istart    ", Nr);
+  printWord(state);
+
+  invShiftRows(state);
+  printf("round[%d].is_row    ", Nr);
+  printWord(state);
+
+  invSubBytes(state);
+  printf("round[%d].is_box    ", Nr);
+  printWord(state);
+
+  printf("round[%d].ik_sch    ", Nr);
+  addRoundKey(state, w, 0);
+
+  printf("round[%d].ioutput   ", Nr);
+  printWord(state);
+
+  byte = 0;
+
+  //out = state
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+	  out[byte++] = state[j][i];
 }
 
 /* Driver */
 
 int main(int argc, char *argv[])
 {
-	// C.1 Test Case
-	printf("C.1   AES-128 (Nk=4, Nr=10)\n\n");
-	printf("PLAINTEXT:          ");
-	uint8_t in[16] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-					0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+  // C.1 Test Case
+  printf("C.1   AES-128 (Nk=4, Nr=10)\n\n");
+  printf("PLAINTEXT:          ");
+  
+  uint8_t plaintext_one[16] = {
+	0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+	0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+  };
 	
   for(int i = 0; i < 16; i++)
-    printf("%02x", in[i]);
-	printf("\n");
+    printf("%02x", plaintext_one[i]);
+  printf("\n");
 	
-	printf("KEY:                ");
-	uint8_t key[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-					0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
-	for(int i = 0; i < 16; i++) printf("%02x", key[i]);
-	printf("\n\n");
+  printf("KEY:                ");
+  uint8_t first_key[16] = {
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+  };
+  
+  for(int i = 0; i < 16; i++)
+    printf("%02x", first_key[i]);
+  printf("\n\n");
 
-	uint32_t w[44];
-	keyExpansion(key, w, 4);
+  uint32_t w1[44];
+
+  keyExpansion(first_key, w1, 4);
 	
-	printf("CIPHER (ENCRYPT):\n");
-	uint8_t out[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	cipher(in, out, w);
+  printf("CIPHER (ENCRYPT):\n");
 
-	printf("\nINVERSE CIPHER (DECRYPT):\n");
-	invCipher(out, in, w);
+  uint8_t out_one[16] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  };
+  
+  cipher(plaintext_one, out_one, w1);
+
+  printf("\nINVERSE CIPHER (DECRYPT):\n");
+  invCipher(out_one, plaintext_one, w1);
 
   // C.2 Test Case
-	printf("\nC.2   AES-192 (Nk=6, Nr=12)\n\n");
-	printf("PLAINTEXT:          ");
-	uint8_t in1[16] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-					0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
-	for(int i = 0; i < 16; i++) printf("%02x", in1[i]);
-	printf("\n");
+  printf("\nC.2   AES-192 (Nk=6, Nr=12)\n\n");
+  printf("PLAINTEXT:          ");
+  
+  uint8_t plaintext_two[16] = {
+	0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+	0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+  };
+  
+  for(int i = 0; i < 16; i++)
+    printf("%02x", plaintext_two[i]);
+  printf("\n");
 	
-	printf("KEY:                ");
-	uint8_t key1[24] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-					0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17};
-	for(int i = 0; i < 24; i++) printf("%02x", key1[i]);
-	printf("\n\n");
+  printf("KEY:                ");
 
-	uint32_t w1[52];
-	keyExpansion(key1, w1, 6);
+  uint8_t second_key[24] = {
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
+  };
 	
-	printf("CIPHER (ENCRYPT):\n");
-	uint8_t out1[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	cipher(in1, out1, w1);
-	
-	printf("\nINVERSE CIPHER (DECRYPT):\n");
-	invCipher(out1, in1, w1);
+  for(int i = 0; i < 24; i++)
+    printf("%02x", second_key[i]);
+  printf("\n\n");
 
+  uint32_t w2[52];
+
+  keyExpansion(second_key, w2, 6);
+	
+  printf("CIPHER (ENCRYPT):\n");
+	
+  uint8_t out_two[16] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  };
+	
+  cipher(plaintext_two, out_two, w2);
+	
+  printf("\nINVERSE CIPHER (DECRYPT):\n");
+
+  invCipher(out_two, plaintext_two, w2);
 
   // C.3 Test Case
-	printf("\nC.3   AES-256 (Nk=8, Nr=14)\n\n");
-	printf("PLAINTEXT:          ");
-	uint8_t in2[16] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-					0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
-	for(int i = 0; i < 16; i++) printf("%02x", in2[i]);
-	printf("\n");
+  printf("\nC.3   AES-256 (Nk=8, Nr=14)\n\n");
+  printf("PLAINTEXT:          ");
 	
-	printf("KEY:                ");
-	uint8_t key2[32] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-					0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-					0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
-	for(int i = 0; i < 32; i++) printf("%02x", key2[i]);
-	printf("\n\n");
+  uint8_t plaintext_three[16] = {
+	0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+	0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+  };
 
-	uint32_t w2[60];
-	keyExpansion(key2, w2, 8);
+  for(int i = 0; i < 16; i++)
+    printf("%02x", plaintext_three[i]);
+  printf("\n");
 	
-	printf("CIPHER (ENCRYPT):\n");
-	uint8_t out2[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	cipher(in2, out2, w2);
+  printf("KEY:                ");
 
-	printf("\nINVERSE CIPHER (DECRYPT):\n");
-	invCipher(out2, in2, w2);
-	//end testing c.3
-	
-	return 0; //amen
+  uint8_t third_key[32] = {
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+	0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+  };
+
+  for(int i = 0; i < 32; i++)
+    printf("%02x", third_key[i]);
+  printf("\n\n");
+
+  uint32_t w3[60];
+
+  keyExpansion(third_key, w3, 8);
+
+  printf("CIPHER (ENCRYPT):\n");
+  
+  uint8_t out_three[16] = { 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  };
+
+  cipher(plaintext_three, out_three, w3);
+
+  printf("\nINVERSE CIPHER (DECRYPT):\n");
+
+  invCipher(out_three, plaintext_three, w3);
+
+  return 0;
+
 }
 
